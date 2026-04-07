@@ -10,7 +10,7 @@ export const Media: CollectionConfig = {
   admin: {
     group: "Content",
     description:
-      "Images, PDFs, and other files. Alt text is auto-generated for images.",
+      "Images and graphics. Alt text is auto-generated on upload.",
     pagination: { defaultLimit: 50 },
   },
   access: {
@@ -75,56 +75,65 @@ export const Media: CollectionConfig = {
       },
     ],
     afterChange: [
-      ({ doc, operation, req }) => {
-        if (operation !== "create") return;
-        if (doc.alt) return;
-        if (!doc.mimeType?.startsWith("image/")) return;
+      async ({ doc, operation, req }) => {
+        if (operation !== "create") return doc;
+        if (doc.alt) return doc;
+        if (!doc.mimeType?.startsWith("image/")) return doc;
 
         const isSvg = doc.mimeType === "image/svg+xml";
 
         if (isSvg) {
           const altText = altTextFromFilename(doc.filename as string);
           if (altText) {
-            req.payload
-              .update({
+            try {
+              await req.payload.update({
                 collection: "media",
                 id: doc.id,
                 data: { alt: altText },
-              })
-              .catch(() => {});
+              });
+            } catch (error) {
+              req.payload.logger.warn(
+                `[Media] Failed to save SVG alt text for ${doc.filename}: ${error}`,
+              );
+            }
           }
-          return;
+          return doc;
         }
 
         const thumbUrl = (doc.sizes as Record<string, any>)?.thumbnail?.url;
         const imageUrl = thumbUrl || doc.url;
-        if (!imageUrl) return;
+        if (!imageUrl) return doc;
 
         const fullUrl = (imageUrl as string).startsWith("http")
           ? (imageUrl as string)
           : `${process.env.NEXT_PUBLIC_SITE_URL || ""}${imageUrl}`;
 
-        generateAltText(fullUrl, doc.filename as string)
-          .then((altText) => {
-            if (altText) {
-              return req.payload.update({
-                collection: "media",
-                id: doc.id,
-                data: { alt: altText },
-              });
-            }
-          })
-          .catch(() => {});
+        try {
+          const altText = await generateAltText(fullUrl, doc.filename as string);
+          if (altText) {
+            await req.payload.update({
+              collection: "media",
+              id: doc.id,
+              data: { alt: altText },
+            });
+          }
+        } catch (error) {
+          req.payload.logger.warn(
+            `[Media] Failed to generate alt text for ${doc.filename}: ${error}`,
+          );
+        }
+
+        return doc;
       },
     ],
   },
   upload: {
-    mimeTypes: ["image/*", "application/pdf"],
+    mimeTypes: ["image/*"],
     imageSizes: [
       {
         name: "thumbnail",
         width: 400,
-        height: 300,
+        height: undefined,
         position: "centre",
       },
       {
@@ -140,6 +149,9 @@ export const Media: CollectionConfig = {
         position: "centre",
       },
     ],
-    adminThumbnail: "thumbnail",
+    adminThumbnail: ({ doc }) => {
+      const sizes = doc?.sizes as Record<string, { url?: string | null }> | undefined;
+      return sizes?.thumbnail?.url || sizes?.desktop?.url || (doc?.url as string) || "";
+    },
   },
 };

@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import sharp from "sharp";
 
 /**
  * Infer alt text from a filename for files that Claude can't process (e.g. SVGs).
@@ -61,29 +62,46 @@ export async function generateAltText(imageUrl: string, filename?: string): Prom
   if (!client) return null;
 
   try {
-    // For localhost URLs, fetch the image and send as base64
-    // (Claude's API can't reach localhost)
+    // Detect unsupported formats that need conversion
+    const ext = imageUrl.split("?")[0].split(".").pop()?.toLowerCase() || "";
+    const UNSUPPORTED_EXTS = new Set(["avif", "tiff", "tif", "heic", "heif"]);
     const isLocal = imageUrl.includes("localhost") || imageUrl.includes("127.0.0.1");
+    const needsConversion = UNSUPPORTED_EXTS.has(ext);
 
     let imageSource: Anthropic.ImageBlockParam["source"];
 
-    if (isLocal) {
+    if (isLocal || needsConversion) {
       const res = await fetch(imageUrl);
       if (!res.ok) {
-        console.warn("[generateAltText] Failed to fetch local image:", res.status);
+        console.warn("[generateAltText] Failed to fetch image:", res.status);
         return null;
       }
-      const contentType = res.headers.get("content-type") || "image/png";
-      if (!SUPPORTED_TYPES.has(contentType)) {
-        console.warn("[generateAltText] Unsupported image type:", contentType);
-        return null;
+      const rawBuffer = Buffer.from(await res.arrayBuffer());
+
+      let finalBuffer: Buffer;
+      let mediaType: ImageMediaType;
+
+      if (needsConversion) {
+        // Convert unsupported formats to PNG (preserves transparency)
+        finalBuffer = await sharp(rawBuffer)
+          .resize(800, 800, { fit: "inside", withoutEnlargement: true })
+          .png()
+          .toBuffer();
+        mediaType = "image/png";
+      } else {
+        const contentType = res.headers.get("content-type") || "image/png";
+        if (!SUPPORTED_TYPES.has(contentType)) {
+          console.warn("[generateAltText] Unsupported image type:", contentType);
+          return null;
+        }
+        finalBuffer = rawBuffer;
+        mediaType = contentType as ImageMediaType;
       }
-      const buffer = await res.arrayBuffer();
-      const base64 = Buffer.from(buffer).toString("base64");
+
       imageSource = {
         type: "base64",
-        media_type: contentType as ImageMediaType,
-        data: base64,
+        media_type: mediaType,
+        data: finalBuffer.toString("base64"),
       };
     } else {
       imageSource = { type: "url", url: imageUrl };

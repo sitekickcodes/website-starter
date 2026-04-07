@@ -1,1 +1,10 @@
 /* Add custom admin panel styles here */
+
+.thumbnail:not(.thumbnail--size-none) img,
+.thumbnail:not(.thumbnail--size-none) svg,
+.folder-file-card__preview-area .thumbnail > img,
+.folder-file-card__preview-area img,
+.file__thumbnail img {
+  object-fit: contain !important;
+  background: var(--theme-elevation-100);
+}
