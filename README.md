@@ -44,6 +44,14 @@ On first visit to the admin, you'll be prompted to create your first user.
 2. Copy the connection string into `POSTGRES_URL` in `.env.local`
 3. Or add the Neon integration in your Vercel project (auto-sets `POSTGRES_URL`)
 
+> **Use the pooler endpoint.** Point `POSTGRES_URL` at the host that ends in
+> `-pooler.<region>.aws.neon.tech` (Neon's PgBouncer endpoint), not the direct
+> compute endpoint. The Vercel integration does this automatically. PgBouncer
+> 1.21+ supports prepared statements in transaction mode, so Drizzle works
+> against the pooler with no extra config — and you get warm connections,
+> which materially shortens cold-start latency on serverless. See Neon's
+> [connection pooling docs](https://neon.tech/docs/connect/connection-pooling).
+
 ### Vercel Blob
 1. Add Blob storage in your Vercel project dashboard
 2. Copy the token into `BLOB_READ_WRITE_TOKEN` in `.env.local`
