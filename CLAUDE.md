@@ -167,6 +167,15 @@ afterChange: [
 - `NEXT_PUBLIC_` prefixed vars are exposed to the browser — only use for non-sensitive values
 - Google Analytics ID is managed in CMS Site Settings (not env vars)
 
+## ESLint
+
+- Pinned to `^9`. Do not bump to ESLint 10 — `eslint-plugin-react@7.37.x`
+  (latest, pulled in transitively by `eslint-config-next`) still calls the
+  deprecated `context.getFilename()` API that ESLint 10 removed, so every
+  rule using filenames throws on load and `bun run lint` dies before it
+  checks a single file. Stay on 9 until the upstream plugin ecosystem
+  catches up.
+
 ## Git
 
 - Do not commit `.env.local` or any `.env` files (except `.env.example`)
