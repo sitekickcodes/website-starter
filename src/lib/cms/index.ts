@@ -8,6 +8,8 @@ export type {
   SiteSettings,
   AnalyticsSettings,
   SocialLinks,
+  CMSAdapter,
+  CMSFetchOptions,
 } from "./types";
 
 export { cms } from "./payload";

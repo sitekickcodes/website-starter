@@ -55,3 +55,17 @@ export interface SocialLinks {
   youtube?: string;
   tiktok?: string;
 }
+
+/** Options for CMS fetchers that vary based on draft mode. */
+export interface CMSFetchOptions {
+  /** When true, fetch the latest draft revision (used inside Live Preview). */
+  draft?: boolean;
+}
+
+/** The CMS adapter interface that each implementation must satisfy. */
+export interface CMSAdapter {
+  getPage(path: string, opts?: CMSFetchOptions): Promise<Page | null>;
+  getSiteSettings(): Promise<SiteSettings>;
+  getAnalytics(): Promise<AnalyticsSettings>;
+  getSocialLinks(): Promise<SocialLinks>;
+}

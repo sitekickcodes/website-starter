@@ -4,6 +4,11 @@ import { AnimateOnScroll } from "@/components/animate-on-scroll";
 import { NewsletterForm } from "@/components/marketing/newsletter-form";
 import { buildOrganizationSchema, buildWebSiteSchema } from "@/lib/structured-data";
 
+// ISR: serve a cached render and rebuild at most once per hour. Inside the
+// admin's Live Preview iframe, /api/draft enables draftMode and the render
+// bypasses this cache. CMS edits trigger revalidatePath() via afterChange
+// hooks so published changes also invalidate.
+export const revalidate = 3600;
 
 export default async function Home() {
   const [settings, socialLinks] = await Promise.all([

@@ -12,6 +12,25 @@ export const Pages: CollectionConfig = {
     description:
       "Manage how each page appears in search engines and social media.",
     pagination: { defaultLimit: 50 },
+    livePreview: {
+      // Route through /api/draft so the iframe enables draftMode and bypasses
+      // the ISR cache — the adapter then fetches the latest unpublished draft
+      // instead of the published version.
+      url: ({ data }) => {
+        const path = (data?.path as string) || "/";
+        const secret = process.env.PAYLOAD_SECRET || "";
+        return `/api/draft?secret=${encodeURIComponent(secret)}&url=${encodeURIComponent(path)}`;
+      },
+      breakpoints: [
+        { label: "Mobile", name: "mobile", width: 375, height: 667 },
+        { label: "Tablet", name: "tablet", width: 768, height: 1024 },
+        { label: "Desktop", name: "desktop", width: 1440, height: 900 },
+      ],
+    },
+  },
+  versions: {
+    drafts: { autosave: { interval: 375 } },
+    maxPerDoc: 10,
   },
   defaultSort: "sortOrder",
   access: {

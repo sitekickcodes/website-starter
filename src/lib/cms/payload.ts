@@ -2,8 +2,8 @@ import { cache } from "react";
 import { getPayload } from "payload";
 import config from "@payload-config";
 import type {
+  CMSAdapter,
   CMSImage,
-  Page,
   SiteSettings,
   AnalyticsSettings,
   SocialLinks,
@@ -45,14 +45,18 @@ const cachedGetSocialLinks = cache(async (): Promise<SocialLinks> => {
   };
 });
 
-export const cms = {
-  async getPage(path: string): Promise<Page | null> {
+export const cms: CMSAdapter = {
+  async getPage(path, opts) {
     const payload = await getClient();
     const { docs } = await payload.find({
       collection: "pages",
       where: { path: { equals: path } },
       depth: 1,
       limit: 1,
+      // When true, surface the latest autosaved draft instead of the
+      // last-published version. The Pages collection enables drafts so this
+      // flag is what powers Live Preview inside the admin.
+      draft: opts?.draft ?? false,
     });
 
     const doc = docs[0];

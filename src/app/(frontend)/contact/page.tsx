@@ -4,6 +4,7 @@ import { pageMetadata } from "@/lib/page-metadata";
 import { ContactForm } from "@/components/contact/contact-form";
 import { cms } from "@/lib/cms";
 
+export const revalidate = 3600;
 
 export async function generateMetadata(): Promise<Metadata> {
   return pageMetadata("/contact", {

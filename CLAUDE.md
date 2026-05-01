@@ -124,10 +124,17 @@ Note: Migration files must use `import { sql } from 'drizzle-orm'` (not from `@p
 
 ## Cache & Revalidation
 
-- **No time-based ISR** — pages revalidate on-demand when CMS content changes
-- Every collection and global has an `afterChange` hook that calls `revalidatePath()` for affected pages
+- **ISR with on-demand invalidation** — frontend pages set `export const revalidate = 3600` (or `60` for pages with live data) and rebuild on the next request after the window expires
+- Every collection and global has an `afterChange` hook that calls `revalidatePath()` so published CMS edits invalidate the cache immediately, not after the time window
 - **Dynamic import required**: hooks must use `await import("next/cache")` (not static `import from "next/cache"`) because the Payload CLI loads collection configs outside Next.js during migrations
 - Google Analytics ID and custom scripts are managed via CMS Site Settings (not env vars)
+
+### Draft Mode + Live Preview
+
+- `Pages` collection has `versions: { drafts: { autosave } }` enabled. Live Preview routes through `/api/draft?secret=$PAYLOAD_SECRET&url=<path>` which enables Next.js draftMode (cookie set), bypassing the ISR cache and telling the adapter to fetch the latest unpublished draft.
+- `cms.getPage(path, { draft })` is the only adapter method that takes a draft flag — pages and `pageMetadata()` read `await draftMode().isEnabled` and pass it through.
+- `/api/exit-draft` disables draft mode for users who want to opt out.
+- Both routes have a same-origin guard on the redirect target. `/api/draft` also requires the `PAYLOAD_SECRET` env var.
 
 ### Adding Revalidation to New Collections
 

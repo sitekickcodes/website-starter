@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
+import { draftMode } from "next/headers";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
@@ -30,9 +31,10 @@ const instrumentSerif = Instrument_Serif({
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://example.com";
 
 export async function generateMetadata(): Promise<Metadata> {
+  const { isEnabled: isDraft } = await draftMode();
   const [settings, homepage] = await Promise.all([
     cms.getSiteSettings(),
-    cms.getPage("/"),
+    cms.getPage("/", { draft: isDraft }),
   ]);
   const siteName = settings.siteName || "My Site";
 
