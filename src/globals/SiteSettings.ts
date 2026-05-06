@@ -11,12 +11,20 @@ export const SiteSettings: GlobalConfig = {
   },
   hooks: {
     afterChange: [
-      async ({ req }) => {
+      async ({ doc, req }) => {
+        if (req.context.disableRevalidate) return doc;
         try {
-          const { revalidatePath } = await import("next/cache");
+          const { revalidatePath, revalidateTag } = await import("next/cache");
+          // Site settings, social links, and analytics all read from this
+          // global, so bust all three cache tags. Then revalidate the layout
+          // since these values appear in the header/footer of every page.
+          revalidateTag("cms:site-settings", "max");
+          revalidateTag("cms:social-links", "max");
+          revalidateTag("cms:analytics", "max");
           revalidatePath("/", "layout");
           req.payload.logger.info("[revalidate] site settings");
         } catch {}
+        return doc;
       },
     ],
   },

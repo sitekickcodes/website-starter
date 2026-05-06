@@ -49,6 +49,13 @@ export default buildConfig({
   db: vercelPostgresAdapter({
     pool: {
       connectionString: process.env.POSTGRES_URL || "",
+      // Aggressive idle timeout so connections close fast and Neon's compute
+      // can suspend. The Vercel runtime freezes the event loop between
+      // invocations so this is a hint — the real timeout enforcement happens
+      // server-side via `idle_session_timeout` (set on the database itself).
+      // See CLAUDE.md > "Neon Connection Tuning".
+      idleTimeoutMillis: 1000,
+      max: 5,
     },
   }),
   ...(process.env.RESEND_API_KEY

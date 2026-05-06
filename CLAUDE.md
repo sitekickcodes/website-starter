@@ -42,10 +42,11 @@
 ## CMS Layer
 
 - Frontend pages import from `@/lib/cms` — never directly from Payload
-- `src/lib/cms/types.ts` defines shared interfaces: `Page`, `CMSImage`, `SiteSettings`, `AnalyticsSettings`, `SocialLinks`
-- `src/lib/cms/payload.ts` implements the data-fetching functions using Payload's local API
-- `src/lib/cms/index.ts` re-exports from payload.ts
-- When adding new content types, update types.ts first, then implement in payload.ts
+- `src/lib/cms/types.ts` defines shared interfaces: `Page`, `CMSImage`, `SiteSettings`, `AnalyticsSettings`, `SocialLinks`, `CMSAdapter`, `CMSFetchOptions`
+- `src/lib/cms/payload.ts` implements the raw Payload local-API adapter
+- `src/lib/cms/cached.ts` wraps every adapter method in `unstable_cache` so public visitors don't wake Neon — see "Cache + Draft Mode pattern" below
+- `src/lib/cms/index.ts` exports the cached adapter as `cms` (default), and the raw one as `uncachedCms` for the rare case where you need fresh-from-Payload data
+- When adding new content types: update types.ts → implement in payload.ts → wrap in cached.ts → add `revalidateTag` to the source's afterChange hook
 
 ## Coding Conventions
 
@@ -124,34 +125,120 @@ Note: Migration files must use `import { sql } from 'drizzle-orm'` (not from `@p
 
 ## Cache & Revalidation
 
-- **ISR with on-demand invalidation** — frontend pages set `export const revalidate = 3600` (or `60` for pages with live data) and rebuild on the next request after the window expires
-- Every collection and global has an `afterChange` hook that calls `revalidatePath()` so published CMS edits invalidate the cache immediately, not after the time window
+- **No time-based ISR** — public pages set `export const revalidate = false` (cache forever) and invalidate on-demand when CMS content changes
+- Every collection and global has an `afterChange` hook that calls BOTH `revalidateTag()` (busts the cms unstable_cache layer) AND `revalidatePath()` (busts prerendered HTML)
 - **Dynamic import required**: hooks must use `await import("next/cache")` (not static `import from "next/cache"`) because the Payload CLI loads collection configs outside Next.js during migrations
-- Google Analytics ID and custom scripts are managed via CMS Site Settings (not env vars)
+
+### Cache + Draft Mode pattern (CRITICAL — read before touching pages)
+
+Public pages call `await draftMode()` to power live preview. In Next.js 16, that opts the page into dynamic rendering on every request — meaning the page function body runs and would normally hit Neon for every visitor. To prevent that, **all CMS data fetches go through `unstable_cache`** in `src/lib/cms/cached.ts`.
+
+```
+Page (await draftMode + revalidate=false)
+   │
+   ├──► cms.getPage("/about")                   ← @/lib/cms = cached adapter
+   │       │
+   │       ├── if (opts?.draft) → uncachedCms.getPage()  (LIVE preview, hits Neon)
+   │       └── else            → unstable_cache(...)      (PUBLIC visit, no Neon)
+   │                                       └── tag: "cms:page:/about"
+   │
+   └──► CMS edit fires afterChange hook ─► revalidateTag(tag, "max") + revalidatePath(path)
+```
+
+**Rules:**
+- **Pages always import from `@/lib/cms`**, never directly from `./cms/payload`. The export `cms` is the cached adapter; `uncachedCms` exists for fresh-from-Payload reads.
+- **Pages MAY call `await draftMode()`** and pass `{ draft: isDraft }` into cms methods that accept it (currently `getPage`). The cached adapter bypasses cache when draft is true.
+- **NEVER call other dynamic Next APIs** (`cookies()`, `headers()`, `unstable_noStore()`) in public-page server components — they have the same dynamic-render side effect but no draft-bypass escape hatch.
+- **`afterChange` hooks must call both** `revalidateTag(tag, "max")` (busts the data cache) **and** `revalidatePath(path)` (busts prerendered HTML). Path alone won't flush `unstable_cache`.
+- **Collections / globals with drafts enabled** must gate revalidation on `doc._status === 'published'` — without this, every autosave keystroke (375ms interval) busts the cache and wakes Neon.
+- **Always include `req.context.disableRevalidate` escape hatch** so bulk imports / migrations / scripts can skip the cache-bust storm.
+
+If you ever see `cache-control: max-age=0, must-revalidate` on a public page response, it means a dynamic API was called somewhere and the cache wrapper isn't doing its job. Trace it down before shipping.
 
 ### Draft Mode + Live Preview
 
-- `Pages` collection has `versions: { drafts: { autosave } }` enabled. Live Preview routes through `/api/draft?secret=$PAYLOAD_SECRET&url=<path>` which enables Next.js draftMode (cookie set), bypassing the ISR cache and telling the adapter to fetch the latest unpublished draft.
-- `cms.getPage(path, { draft })` is the only adapter method that takes a draft flag — pages and `pageMetadata()` read `await draftMode().isEnabled` and pass it through.
+- `Pages` collection has `versions: { drafts: { autosave } }` enabled. Live Preview routes through `/api/draft?secret=$PAYLOAD_SECRET&url=<path>` which enables Next.js draftMode (cookie set), so the cached adapter falls through to the raw Payload local API and the editor sees the latest autosaved draft instantly.
 - `/api/exit-draft` disables draft mode for users who want to opt out.
 - Both routes have a same-origin guard on the redirect target. `/api/draft` also requires the `PAYLOAD_SECRET` env var.
 
-### Adding Revalidation to New Collections
+### Adding Revalidation to New Collections / Globals
+
+Mirror Payload's official `templates/website` `revalidatePage` / `revalidateFooter` hooks. Two required gates plus the dual invalidation:
 
 ```typescript
 afterChange: [
   async ({ doc, req }) => {
+    if (req.context.disableRevalidate) return doc;
     try {
-      const { revalidatePath } = await import("next/cache");
+      const { revalidatePath, revalidateTag } = await import("next/cache");
+      // Tag bust: flushes the cms.* unstable_cache so the next read hits Payload.
+      revalidateTag("cms:your-collection", "max");
+      // Path bust: flushes the prerendered HTML on affected pages.
       revalidatePath("/");
       revalidatePath("/your-page");
       if (doc.slug) revalidatePath(`/your-page/${doc.slug}`);
-      req.payload.logger.info(`[revalidate] your-collection: ${doc.slug}`);
     } catch {}
     return doc;
   },
 ],
 ```
+
+For collections / globals **with drafts enabled** (`versions: { drafts: ... }`), add a status gate. **This is critical for autosave-enabled drafts**: without it, every keystroke during editing busts the cache and wakes Neon.
+
+```typescript
+afterChange: [
+  async ({ doc, previousDoc, req }) => {
+    if (req.context.disableRevalidate) return doc;
+    const status = doc._status;
+    const prevStatus = previousDoc?._status;
+    const justPublished = status === "published";
+    const justUnpublished = prevStatus === "published" && status !== "published";
+    if (!justPublished && !justUnpublished) return doc;
+    // ...revalidateTag + revalidatePath as above
+    return doc;
+  },
+],
+```
+
+## Neon Connection Tuning (CRITICAL for keeping compute suspended)
+
+For low-traffic Neon serverless setups, the default `@payloadcms/db-vercel-postgres` setup keeps compute awake far longer than necessary because Vercel's frozen runtime prevents app-side pool timeouts from firing. Three settings matter, and **all three are required**:
+
+1. **`POSTGRES_URL`: pooler URL is fine, direct works too**
+
+   Pooler URL (`ep-XXX-pooler.region.aws.neon.tech`) routes through Neon's internal pgbouncer. Connection multiplexing is good if you ever scale up. Either pooler or direct works as long as the next two settings are in place — Postgres-side timeout makes the difference, not the routing.
+
+2. **Pool config in payload.config.ts**
+
+   ```ts
+   db: vercelPostgresAdapter({
+     pool: {
+       connectionString: process.env.POSTGRES_URL,
+       idleTimeoutMillis: 1000,
+       max: 5,
+     },
+   }),
+   ```
+
+3. **`idle_session_timeout` on the database itself (the actual fix)**
+
+   ```sql
+   ALTER DATABASE neondb SET idle_session_timeout = '5s';
+   ```
+
+   Vercel's serverless runtime freezes the JS event loop between invocations, so the app-side `idleTimeoutMillis` doesn't fire reliably. Setting `idle_session_timeout` server-side means **Postgres itself kills any backend connection that's been idle for 5s**, regardless of what the client does. This is what lets compute actually suspend. Without it, zombie connections from frozen Vercel functions hold the compute awake indefinitely.
+
+   This setting is per-database and persists across deploys — set it once via SQL and forget about it. Verify with:
+
+   ```sql
+   SELECT unnest(setconfig) FROM pg_db_role_setting
+   JOIN pg_database ON pg_database.oid = setdatabase
+   WHERE datname = 'neondb';
+   ```
+
+**Why this isn't in Payload's official docs:** Payload's `templates/with-vercel-postgres` ships with bare `pool: { connectionString }` and no Postgres tuning. That's fine for traditional production apps with steady traffic where compute is always-on anyway. For low-traffic Neon scale-to-zero, the community has converged on the three settings above as the canonical workaround. See GH issues #5075 and #7254 for the upstream discussion.
+
+**Verification:** after deploying, run `neon operations list --project-id <id>` — suspend gaps should grow from minutes to hours during quiet periods. If still seeing frequent wakes, query `pg_stat_activity` to find what's connecting (any external `client_addr` with `state = idle` for >5s indicates `idle_session_timeout` isn't applied).
 
 ## Performance
 

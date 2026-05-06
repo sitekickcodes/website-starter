@@ -62,11 +62,31 @@ export const Pages: CollectionConfig = {
       },
     ],
     afterChange: [
-      async ({ doc, req }) => {
+      async ({ doc, previousDoc, req }) => {
+        // Bulk-operation escape hatch (matches Payload's official template).
+        if (req.context.disableRevalidate) return doc;
+
+        // CRITICAL: only invalidate when the document is actually published.
+        // Pages collection has autosave drafts on a 375ms interval, so
+        // without this gate every keystroke during editing busts the public
+        // cache and wakes Neon. See CLAUDE.md > "Cache + Draft Mode pattern".
+        const status = (doc as { _status?: string })._status;
+        const prevStatus = (previousDoc as { _status?: string } | undefined)
+          ?._status;
+        const justPublished = status === "published";
+        const justUnpublished =
+          prevStatus === "published" && status !== "published";
+        if (!justPublished && !justUnpublished) return doc;
+
         try {
-          const { revalidatePath } = await import("next/cache");
+          const { revalidatePath, revalidateTag } = await import("next/cache");
+          // Tag bust flushes cms.getPage unstable_cache; path bust flushes
+          // prerendered HTML. Both are required.
+          revalidateTag(`cms:page:${doc.path}`, "max");
           revalidatePath(doc.path || "/", "layout");
-          req.payload.logger.info(`[revalidate] page: ${doc.path}`);
+          req.payload.logger.info(
+            `[revalidate] page: ${doc.path}${justUnpublished ? " (unpublished)" : ""}`,
+          );
         } catch {}
         return doc;
       },
