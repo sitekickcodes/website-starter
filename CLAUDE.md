@@ -278,6 +278,22 @@ After deploying, `neon operations list --project-id <id>` should show suspend ga
 - Image formats: avif + webp via next.config
 - Below-fold client components should be lazy-loaded with `next/dynamic`
 
+### Cron alignment (when adding daily crons)
+
+The starter ships with `crons: []` in `vercel.json`. When a project adds multiple daily crons (event sync, review sync, blob cleanup, etc.), **align them to the same UTC hour**.
+
+```json
+"crons": [
+  { "path": "/api/sync-events",  "schedule": "0 6 * * *" },
+  { "path": "/api/sync-reviews", "schedule": "0 6 * * *" },
+  { "path": "/api/cron/clean-blobs", "schedule": "0 6 * * *" }
+]
+```
+
+Each cron wakes Neon — splitting them across multiple hours means multiple wake windows per day, each holding compute warm for ~10 minutes (pgbouncer's `server_idle_timeout`). Aligning them to one hour means one wake window per day instead of three or four.
+
+`0 6 * * *` (06:00 UTC) is a sensible default for North American venues / sites — it's midnight Mountain, 11pm Pacific, 1am Central, 2am Eastern. Pick whatever quiet hour suits the audience; the principle is "all the same hour" not "this specific hour."
+
 ## Environment Variables
 
 - Never commit secrets to git
