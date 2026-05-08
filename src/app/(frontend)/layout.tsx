@@ -5,6 +5,7 @@ import { GoogleAnalytics } from "@next/third-parties/google";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { BotIdClient } from "botid/client";
 import { AutoBreadcrumbJsonLd } from "@/components/auto-breadcrumb-jsonld";
 import { PostHogProvider } from "@/components/tracking/posthog-provider";
@@ -98,6 +99,7 @@ export default async function RootLayout({
           <Footer />
         </PostHogProvider>
         <Analytics />
+        <SpeedInsights />
         {gaId && (
           <GoogleAnalytics gaId={gaId} />
         )}
