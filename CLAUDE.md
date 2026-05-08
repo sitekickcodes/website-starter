@@ -200,15 +200,23 @@ afterChange: [
 ],
 ```
 
-## Neon Connection Tuning (CRITICAL for keeping compute suspended)
+## Neon Connection Tuning
 
-For low-traffic Neon serverless setups, the default `@payloadcms/db-vercel-postgres` setup keeps compute awake far longer than necessary because Vercel's frozen runtime prevents app-side pool timeouts from firing. Three settings matter, and **all three are required**:
+Use Neon's **pooled** endpoint, per Payload's recommendation for serverless deployments. The granular `unstable_cache` layer (see "Cache + Draft Mode pattern" above) is what keeps compute suspended — not the connection-string choice. Two settings to know:
 
-1. **`POSTGRES_URL`: pooler URL is fine, direct works too**
+1. **`POSTGRES_URL` host: use the POOLED endpoint (`-pooler`)**
 
-   Pooler URL (`ep-XXX-pooler.region.aws.neon.tech`) routes through Neon's internal pgbouncer. Connection multiplexing is good if you ever scale up. Either pooler or direct works as long as the next two settings are in place — Postgres-side timeout makes the difference, not the routing.
+   ```env
+   POSTGRES_URL="postgresql://user:pass@ep-XXX-pooler.region.aws.neon.tech/neondb?sslmode=require"
+   ```
 
-2. **Pool config in payload.config.ts**
+   The pooled host routes through Neon's internal pgbouncer in transaction mode, which multiplexes many short-lived serverless function connections onto a smaller pool of backend Postgres connections. This is what Payload recommends for Vercel-style deployments.
+
+   Caveat to know: Neon's pgbouncer holds each backend connection open for ~10 minutes after the last query (its `server_idle_timeout` default), which can delay `suspend_timeout` from firing if queries are happening regularly. **In practice this doesn't matter** — the cache scheme means public visitors never hit Neon, and CMS edits happen in bursts with long quiet periods, so compute does suspend cleanly between editing sessions.
+
+   This is a deliberate trade-off. The direct endpoint forces more aggressive suspension but loses pgbouncer's multiplexing benefit. With the cache layer doing its job, there's nothing for the pooler's backend-hold to keep warm — pooler wins.
+
+2. **`idleTimeoutMillis: 1000` + `max: 5` in the adapter pool config**
 
    ```ts
    db: vercelPostgresAdapter({
@@ -220,25 +228,28 @@ For low-traffic Neon serverless setups, the default `@payloadcms/db-vercel-postg
    }),
    ```
 
-3. **`idle_session_timeout` on the database itself (the actual fix)**
+   Default is ~10s. Setting to 1s means a connection used for one request closes ~immediately on the **app side**. Neon's pgbouncer keeps its own backend connection longer regardless, but closing app-side fast still helps with serverless cold-restart hygiene and avoids the app-side pool accumulating dead handles.
 
-   ```sql
-   ALTER DATABASE neondb SET idle_session_timeout = '5s';
-   ```
+**Why we don't use `@neondatabase/serverless` HTTP driver directly:** Payload requires transactions for atomic writes. The HTTP-only driver doesn't support transactions. `@vercel/postgres` (used by the adapter) already imports from `@neondatabase/serverless` under the hood and uses its WebSocket Pool mode, which IS the right call.
 
-   Vercel's serverless runtime freezes the JS event loop between invocations, so the app-side `idleTimeoutMillis` doesn't fire reliably. Setting `idle_session_timeout` server-side means **Postgres itself kills any backend connection that's been idle for 5s**, regardless of what the client does. This is what lets compute actually suspend. Without it, zombie connections from frozen Vercel functions hold the compute awake indefinitely.
+**Optional: `idle_session_timeout` on the database**
 
-   This setting is per-database and persists across deploys — set it once via SQL and forget about it. Verify with:
+```sql
+ALTER DATABASE neondb SET idle_session_timeout = '5s';
+```
 
-   ```sql
-   SELECT unnest(setconfig) FROM pg_db_role_setting
-   JOIN pg_database ON pg_database.oid = setdatabase
-   WHERE datname = 'neondb';
-   ```
+Forces Postgres itself to kill backend connections idle >5s, regardless of what the client does. Useful as a belt-and-suspenders measure on low-traffic deployments where you want maximum aggressive suspension. Not strictly required if the cache layer is solid — public visitors don't hit Neon anyway, so there's nothing for this to clean up most of the time. Set once via SQL, persists across deploys.
 
-**Why this isn't in Payload's official docs:** Payload's `templates/with-vercel-postgres` ships with bare `pool: { connectionString }` and no Postgres tuning. That's fine for traditional production apps with steady traffic where compute is always-on anyway. For low-traffic Neon scale-to-zero, the community has converged on the three settings above as the canonical workaround. See GH issues #5075 and #7254 for the upstream discussion.
+**Verification — what to actually check:** the real cache-health signal is `pg_stat_activity`. During quiet periods you should see zero application connections holding Neon open (only Neon-internal `pgbouncer` and similar). If a long-lived backend with an app `application_name` shows up, something is bypassing the cache layer (a server component calling a non-cached method, a forgotten `cookies()`/`headers()` call forcing dynamic rendering on a cached page, etc.) — trace it down.
 
-**Verification:** after deploying, run `neon operations list --project-id <id>` — suspend gaps should grow from minutes to hours during quiet periods. If still seeing frequent wakes, query `pg_stat_activity` to find what's connecting (any external `client_addr` with `state = idle` for >5s indicates `idle_session_timeout` isn't applied).
+```sql
+SELECT application_name, state, COUNT(*),
+       MAX(EXTRACT(EPOCH FROM (NOW() - state_change)))::int AS max_idle_s
+FROM pg_stat_activity WHERE datname = 'neondb'
+GROUP BY application_name, state ORDER BY 3 DESC;
+```
+
+After deploying, `neon operations list --project-id <id>` should show suspend gaps growing from minutes to hours during quiet periods.
 
 ## Performance
 
