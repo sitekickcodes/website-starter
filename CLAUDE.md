@@ -200,6 +200,26 @@ afterChange: [
 ],
 ```
 
+### Edge-404 middleware for dynamic routes (add when needed)
+
+The starter has no dynamic routes today, so there's no middleware. The moment you add a `[slug]` or `[id]` route under `(frontend)/` that fetches from a CMS collection (events, posts, products, etc.), **add this pattern at the same time**.
+
+**The problem.** Crawlers will discover URLs that no longer exist (slug rename, event archived, post deleted). Each dead-slug hit goes to the dynamic page route, fires a lambda, opens a Neon connection through the pooler, and pgbouncer holds the backend warm for ~10 minutes. New dead-slug discoveries arriving every few minutes mean compute never suspends. The cache layer doesn't help here because dead slugs don't have a cache entry to hit.
+
+**The fix.** Edge middleware fetches a static slug-list endpoint (itself edge-cached and busted by `afterChange` on the source collection) and returns a 410 Gone for unknown slugs without firing the page lambda.
+
+Two files plus a hook tweak:
+
+1. **`src/app/api/<resource>/valid-slugs/route.ts`** — a `force-static` route that returns `[slug, slug, ...]` for the resource. Edge-cached for a day with `s-maxage=86400, stale-while-revalidate=3600`.
+
+2. **`src/middleware.ts`** — matches `/<resource>/:slug`, fetches the slug list (in-memory cached for 60s per function instance to avoid hammering on every request), returns a static 410 Gone HTML response for unknown slugs. Fails open if the slug list endpoint is briefly down (so we don't accidentally 404 valid pages).
+
+3. **`<Collection>.afterChange`** — bust the slug list when the collection list changes structurally (creates, deletes, slug renames, status changes that hide the page). Add `revalidatePath("/api/<resource>/valid-slugs")` next to the existing tag/path busts.
+
+Use **410 Gone**, not 404 — Google deindexes 410s faster, since 404s are treated as potentially temporary. The body can be styled identically to a 404; the status code is the SEO signal.
+
+Reference implementation: see `live-from-the-divide` repo — `src/middleware.ts`, `src/app/api/events/valid-slugs/route.ts`, and `src/collections/Events.ts` (the `afterChange` hook calls `revalidatePath("/api/events/valid-slugs")`).
+
 ## Neon Connection Tuning
 
 Use Neon's **pooled** endpoint, per Payload's recommendation for serverless deployments. The granular `unstable_cache` layer (see "Cache + Draft Mode pattern" above) is what keeps compute suspended — not the connection-string choice. Two settings to know:
