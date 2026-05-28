@@ -13,7 +13,7 @@
     "generate:importmap": "cross-env NODE_OPTIONS=--no-deprecation payload generate:importmap --disable-transpile",
     "migrate:create": "cross-env NODE_OPTIONS=--no-deprecation payload migrate:create --disable-transpile",
     "ci": "bun run build",
-    "env:pull": "op inject -i .env.example -o .env.local"
+    "env:pull": "vercel env pull .env.local"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

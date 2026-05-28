@@ -11,8 +11,7 @@
 - Bun as package manager (not npm/yarn/pnpm)
 - Resend for transactional emails
 - Anthropic Claude (Haiku) for AI alt text generation
-- Deployed on Vercel
-- 1Password CLI for env var management
+- Deployed on Vercel — env vars pulled via Vercel CLI
 
 ## Commands
 
@@ -297,7 +296,8 @@ Each cron wakes Neon — splitting them across multiple hours means multiple wak
 ## Environment Variables
 
 - Never commit secrets to git
-- All env vars are documented in `.env.example` with 1Password `op://` references
+- All env vars are documented in `.env.example`. Pull from Vercel with
+  `bun run env:pull` (wraps `vercel env pull .env.local`)
 - `NEXT_PUBLIC_` prefixed vars are exposed to the browser — only use for non-sensitive values
 - Google Analytics ID is managed in CMS Site Settings (not env vars)
 

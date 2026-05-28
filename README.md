@@ -12,14 +12,14 @@ cd my-site
 # Install dependencies
 bun install
 
-# Pull environment variables from 1Password
-bun run env:pull
+# Pull environment variables from Vercel
+bun run env:pull   # wraps `vercel env pull .env.local`
 
 # Start dev server
 bun dev
 ```
 
-> **No 1Password?** Copy the template instead: `cp .env.example .env.local` and fill in the values by hand.
+> **No Vercel project linked yet?** Copy the template instead: `cp .env.example .env.local` and fill in the values by hand.
 
 Open [http://localhost:3000](http://localhost:3000) for the site, and [http://localhost:3000/admin](http://localhost:3000/admin) for the Payload admin panel.
 
@@ -173,7 +173,7 @@ src/
 | `bun start` | Start production server |
 | `bun run lint` | Run ESLint |
 | `bun run generate:types` | Regenerate Payload TypeScript types |
-| `bun run env:pull` | Pull env vars from 1Password |
+| `bun run env:pull` | Pull env vars from Vercel (`vercel env pull .env.local`) |
 
 ## Deploying to Vercel
 
