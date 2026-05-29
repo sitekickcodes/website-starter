@@ -6,9 +6,10 @@ Blob uploads with AI alt text, redirects, and analytics wiring — and gets out 
 the way on schema and design. Clone it, connect your services, and build.
 
 > **What's intentionally not here:** no content collections beyond `Users` +
-> `Media`, no globals, no header/footer/nav, no typography system, no fonts
-> beyond **Inter**, and no preinstalled shadcn components. Add schema and design
-> per project. See `CLAUDE.md` for the full rationale and conventions.
+> `Media`, no project-specific globals beyond the minimal Site Settings
+> analytics tab, no header/footer/nav, no typography system, no fonts beyond
+> **Inter**, and no preinstalled shadcn components. Add schema and design per
+> project. See `CLAUDE.md` for the full rationale and conventions.
 
 ## Quick Start
 
@@ -50,7 +51,7 @@ first visit to the admin you'll create your first user.
 | **Payload** | `PAYLOAD_SECRET` | Generate with `openssl rand -base64 32`. |
 | **Resend** (optional) | `RESEND_API_KEY`, `RESEND_FROM_EMAIL` | Powers Payload auth/transactional email. |
 | **Anthropic** (optional) | `ANTHROPIC_API_KEY` | Auto-generates media alt text. |
-| **Analytics** (optional) | `NEXT_PUBLIC_GA_ID`, `NEXT_PUBLIC_GTM_ID`, `NEXT_PUBLIC_FB_PIXEL_ID`, `NEXT_PUBLIC_POSTHOG_KEY` | Each enables only when its key is set. Vercel Analytics + Speed Insights are always on. |
+| **Analytics** (optional) | Payload Admin → Site Settings → Analytics | Google Analytics, Google Tag Manager, Meta Pixel, and PostHog are CMS-managed. Vercel Analytics + Speed Insights are always on. |
 
 See `.env.example` for the full list.
 
@@ -77,7 +78,7 @@ push, so you can start building before generating the first migration.
 |---|---|
 | **Users** | Auth-enabled (admin login). |
 | **Media** | Uploads to Vercel Blob, AI-generated alt text, responsive sizes. |
-| **Redirects** | From `@payloadcms/plugin-redirects` — manage 301/302 redirects in /admin; enforced by `src/middleware.ts`. |
+| **Redirects** | From `@payloadcms/plugin-redirects` — manage 301/302 redirects in /admin; enforced by `src/proxy.ts`. |
 
 Add your own collections in `src/collections/` and register them in
 `src/payload.config.ts`, then run `bun run generate:types`.
@@ -87,7 +88,9 @@ Add your own collections in `src/collections/` and register them in
 - **CMS layer** (`src/lib/cms/`) — import from `@/lib/cms`, never Payload
   directly. Reads are wrapped in `unstable_cache` so public traffic doesn't wake
   Neon; CMS edits invalidate via `revalidateTag`.
-- **Redirects** — managed in /admin, enforced in `src/middleware.ts` via a cached
+- **Site Settings** — a minimal global for analytics IDs, cached through the CMS
+  layer so public traffic does not wake Neon after the first read.
+- **Redirects** — managed in /admin, enforced in `src/proxy.ts` via a cached
   `/api/redirects` lookup.
 - **Draft mode / Live Preview** — `/api/draft` + `/api/exit-draft` are wired for
   when you add a draft-enabled collection.

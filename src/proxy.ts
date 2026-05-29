@@ -4,11 +4,14 @@ import type { Redirect } from "@/lib/cms/types";
 /**
  * Enforces the redirects managed in /admin (via @payloadcms/plugin-redirects).
  *
- * It fetches the cached `/api/redirects` list (backed by unstable_cache, so no
+ * Fetches the cached `/api/redirects` list (backed by unstable_cache, so no
  * Neon hit) and matches the request path. Fails open — a transient error never
  * blocks a request.
+ *
+ * Next.js 16 renamed the `middleware` file convention to `proxy`; the exported
+ * function is `proxy` and the matcher `config` export is unchanged.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname, origin } = request.nextUrl;
 
   try {

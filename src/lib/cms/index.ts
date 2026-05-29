@@ -7,6 +7,13 @@
  *
  * See CLAUDE.md > "Cache + Draft Mode pattern" for the architecture.
  */
-export type { CMSImage, Redirect, CMSAdapter, CMSFetchOptions } from "./types";
+export type {
+  AnalyticsSettings,
+  CMSImage,
+  Redirect,
+  SiteSettings,
+  CMSAdapter,
+  CMSFetchOptions,
+} from "./types";
 export { cachedAdapter as cms, CMS_TAGS } from "./cached";
 export { cms as uncachedCms } from "./payload";

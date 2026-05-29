@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { getPayload } from "payload";
 import config from "@payload-config";
-import type { CMSAdapter, Redirect } from "./types";
+import type { CMSAdapter, Redirect, SiteSettings } from "./types";
 
 const getClient = cache(() => getPayload({ config }));
 
@@ -11,6 +11,27 @@ const getClient = cache(() => getPayload({ config }));
  * they don't wake Neon on every request.
  */
 export const cms: CMSAdapter = {
+  async getSiteSettings(): Promise<SiteSettings> {
+    const payload = await getClient();
+    const settings = await payload.findGlobal({
+      slug: "site-settings",
+      depth: 0,
+    });
+
+    return {
+      analytics: {
+        googleAnalyticsId:
+          settings.analytics?.googleAnalyticsId || undefined,
+        googleTagManagerId:
+          settings.analytics?.googleTagManagerId || undefined,
+        metaPixelId: settings.analytics?.metaPixelId || undefined,
+        posthogKey: settings.analytics?.posthogKey || undefined,
+        posthogHost:
+          settings.analytics?.posthogHost || "https://us.i.posthog.com",
+      },
+    };
+  },
+
   async getRedirects(): Promise<Redirect[]> {
     const payload = await getClient();
     const { docs } = await payload.find({

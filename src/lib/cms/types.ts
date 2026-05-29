@@ -17,7 +17,7 @@ export interface CMSImage {
   focalY?: number;
 }
 
-/** A resolved redirect rule consumed by `src/middleware.ts`. */
+/** A resolved redirect rule consumed by `src/proxy.ts`. */
 export interface Redirect {
   /** Source path, e.g. "/old-page". */
   from: string;
@@ -25,6 +25,20 @@ export interface Redirect {
   to: string;
   /** HTTP status: 301 permanent, 302 temporary. */
   type: "301" | "302";
+}
+
+/** Public analytics IDs managed in Payload's Site Settings global. */
+export interface AnalyticsSettings {
+  googleAnalyticsId?: string;
+  googleTagManagerId?: string;
+  metaPixelId?: string;
+  posthogKey?: string;
+  posthogHost?: string;
+}
+
+/** Starter-level global settings exposed to the frontend. */
+export interface SiteSettings {
+  analytics: AnalyticsSettings;
 }
 
 /** Options for fetchers that vary based on draft mode (Live Preview). */
@@ -35,5 +49,6 @@ export interface CMSFetchOptions {
 
 /** The CMS adapter interface each implementation must satisfy. */
 export interface CMSAdapter {
+  getSiteSettings(): Promise<SiteSettings>;
   getRedirects(): Promise<Redirect[]>;
 }

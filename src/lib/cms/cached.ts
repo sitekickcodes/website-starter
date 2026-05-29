@@ -19,8 +19,15 @@ import type { CMSAdapter } from "./types";
 
 // Keep these in sync with the `revalidateTag` calls in collection hooks.
 export const CMS_TAGS = {
+  siteSettings: "cms:site-settings",
   redirects: "cms:redirects",
 } as const;
+
+const cachedGetSiteSettings = unstable_cache(
+  async () => basePayloadAdapter.getSiteSettings(),
+  ["cms:site-settings"],
+  { revalidate: false, tags: [CMS_TAGS.siteSettings] },
+);
 
 const cachedGetRedirects = unstable_cache(
   async () => basePayloadAdapter.getRedirects(),
@@ -29,5 +36,6 @@ const cachedGetRedirects = unstable_cache(
 );
 
 export const cachedAdapter: CMSAdapter = {
+  getSiteSettings: () => cachedGetSiteSettings(),
   getRedirects: () => cachedGetRedirects(),
 };

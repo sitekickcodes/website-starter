@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { BotIdClient } from "botid/client";
 import { PostHogProvider } from "@/components/tracking/posthog-provider";
+import { cms } from "@/lib/cms";
 import "./globals.css";
 
 const inter = Inter({
@@ -15,11 +16,6 @@ const inter = Inter({
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "Sitekick Starter";
-
-// All analytics are env-gated — set the keys in .env.local to enable each one.
-const gaId = process.env.NEXT_PUBLIC_GA_ID;
-const gtmId = process.env.NEXT_PUBLIC_GTM_ID;
-const fbPixelId = process.env.NEXT_PUBLIC_FB_PIXEL_ID;
 
 // BotID-protected routes. Add your form / mutation endpoints here as you
 // build them, e.g. { path: "/api/contact", method: "POST" }.
@@ -47,11 +43,16 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { analytics } = await cms.getSiteSettings();
+  const gaId = analytics.googleAnalyticsId;
+  const gtmId = analytics.googleTagManagerId;
+  const fbPixelId = analytics.metaPixelId;
+
   return (
     <html lang="en" className={inter.variable}>
       <head>
@@ -61,7 +62,10 @@ export default function RootLayout({
         {gtmId && <GoogleTagManager gtmId={gtmId} />}
       </head>
       <body className="antialiased">
-        <PostHogProvider>
+        <PostHogProvider
+          posthogKey={analytics.posthogKey}
+          posthogHost={analytics.posthogHost}
+        >
           <a
             href="#main"
             className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:border focus:bg-background focus:px-4 focus:py-2 focus:text-sm"

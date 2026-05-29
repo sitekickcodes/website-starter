@@ -5,16 +5,13 @@ import { PostHogProvider as PHProvider, usePostHog } from "posthog-js/react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, Suspense } from "react";
 
-const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-const POSTHOG_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com";
+type Props = {
+  children: React.ReactNode;
+  posthogKey?: string;
+  posthogHost?: string;
+};
 
-if (typeof window !== "undefined" && POSTHOG_KEY) {
-  posthog.init(POSTHOG_KEY, {
-    api_host: POSTHOG_HOST,
-    capture_pageview: false,
-    capture_pageleave: true,
-  });
-}
+let initializedConfig: string | undefined;
 
 function PostHogPageView() {
   const pathname = usePathname();
@@ -32,8 +29,23 @@ function PostHogPageView() {
   return null;
 }
 
-export function PostHogProvider({ children }: { children: React.ReactNode }) {
-  if (!POSTHOG_KEY) return children;
+export function PostHogProvider({
+  children,
+  posthogKey,
+  posthogHost = "https://us.i.posthog.com",
+}: Props) {
+  useEffect(() => {
+    const configKey = `${posthogKey}:${posthogHost}`;
+    if (!posthogKey || initializedConfig === configKey) return;
+    posthog.init(posthogKey, {
+      api_host: posthogHost,
+      capture_pageview: false,
+      capture_pageleave: true,
+    });
+    initializedConfig = configKey;
+  }, [posthogKey, posthogHost]);
+
+  if (!posthogKey) return children;
 
   return (
     <PHProvider client={posthog}>

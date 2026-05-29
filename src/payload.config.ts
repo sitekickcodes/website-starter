@@ -11,6 +11,7 @@ import { fileURLToPath } from "url";
 
 import { Users } from "./collections/Users.ts";
 import { Media } from "./collections/Media.ts";
+import { SiteSettings } from "./globals/SiteSettings.ts";
 
 const filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(filename);
@@ -30,6 +31,7 @@ export default buildConfig({
     theme: "dark",
   },
   collections: [Media, Users],
+  globals: [SiteSettings],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || "",
   typescript: {
@@ -73,7 +75,7 @@ export default buildConfig({
     // reference field has a valid target in the base starter. As you add
     // content collections (pages, posts, …), add their slugs here so editors
     // can redirect to them. Custom-URL redirects (the common SEO case) work out
-    // of the box regardless. Enforcement lives in src/middleware.ts.
+    // of the box regardless. Enforcement lives in src/proxy.ts.
     redirectsPlugin({
       collections: ["media"],
       redirectTypes: ["301", "302"],

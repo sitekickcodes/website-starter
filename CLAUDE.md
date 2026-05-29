@@ -11,7 +11,8 @@ collections, fields, and visual design per project.
 Intentionally NOT included (add per project):
 
 - No content collections beyond `Users` + `Media` (no Pages/Posts/etc.)
-- No globals — site config (settings, nav, etc.) is project-specific
+- No project-specific globals — the starter only ships a minimal Site Settings
+  global for analytics IDs
 - No prebuilt design — no header/footer/nav, no typography classes, no fonts
   beyond **Inter**
 - No shadcn/ui components pre-installed — add with `bunx shadcn@latest add <x>`
@@ -30,9 +31,10 @@ into this starter.
 - Bun as package manager (not npm/yarn/pnpm)
 - Resend for transactional/auth email
 - Anthropic Claude (Haiku) for AI alt text generation
-- Redirects via @payloadcms/plugin-redirects + `src/middleware.ts`
-- Analytics (all env-gated): Vercel Analytics + Speed Insights, PostHog,
-  Google Analytics, Google Tag Manager, Meta Pixel
+- Redirects via @payloadcms/plugin-redirects + `src/proxy.ts`
+- Analytics: Vercel Analytics + Speed Insights in code; PostHog, Google
+  Analytics, Google Tag Manager, and Meta Pixel configured in /admin via Site
+  Settings → Analytics
 - Deployed on Vercel — env vars pulled via Vercel CLI
 
 ## Commands
@@ -50,12 +52,13 @@ into this starter.
 - `src/app/api/` — custom API routes: `cron/*` (blob + alt-text maintenance),
   `draft` / `exit-draft` (Live Preview), `generate-alt-text`, `redirects`
 - `src/collections/` — Payload collections (`Users`, `Media`)
+- `src/globals/` — Payload globals (`Site Settings` for analytics IDs)
 - `src/lib/cms/` — CMS layer (types, Payload adapter, cached wrapper, index)
 - `src/lib/` — shared utilities (`utils.ts` → `cn()`, `generateAltText.ts`)
 - `src/components/payload/` — admin customizations (`AdminAvatar`, `GenerateAltTextButton`)
 - `src/components/tracking/` — analytics (`posthog-provider`)
 - `src/components/ui/` — shadcn/ui primitives (empty by default; add per project)
-- `src/middleware.ts` — redirect enforcement (see "Redirects")
+- `src/proxy.ts` — redirect enforcement (see "Redirects")
 - `public/images/`, `public/icons/`, `public/videos/`, `public/fonts/`, `public/og/` — static assets
 
 When you add a new domain area, create a folder and update this list.
@@ -76,8 +79,9 @@ When you add a new domain area, create a folder and update this list.
 ## CMS Layer
 
 - Frontend pages and middleware import from `@/lib/cms` — never directly from Payload.
-- `src/lib/cms/types.ts` defines shared interfaces: `CMSImage`, `Redirect`,
-  `CMSAdapter`, `CMSFetchOptions`.
+- `src/lib/cms/types.ts` defines shared interfaces: `CMSImage`,
+  `SiteSettings`, `AnalyticsSettings`, `Redirect`, `CMSAdapter`,
+  `CMSFetchOptions`.
 - `src/lib/cms/payload.ts` implements the raw Payload local-API adapter.
 - `src/lib/cms/cached.ts` wraps every adapter method in `unstable_cache` so
   public visitors don't wake Neon — see "Cache + Draft Mode pattern" below.
@@ -113,7 +117,7 @@ When you add a new domain area, create a folder and update this list.
 ## Payload CMS
 
 - Collections live in `src/collections/` and are registered in `src/payload.config.ts`
-- Globals (none ship by default) live in `src/globals/` and are registered the same way
+- Globals live in `src/globals/` and are registered in `src/payload.config.ts`
 - After changing collections/globals, run `bun run generate:types` to update `src/payload-types.ts`
 - Use `payload.db.drizzle` for custom database queries outside Payload collections
 - Media uploads go to Vercel Blob automatically — do not store uploads locally
@@ -163,7 +167,7 @@ Note: Migration files must use `import { sql } from 'drizzle-orm'` (not from
 ## Redirects
 
 Redirects are managed in /admin via `@payloadcms/plugin-redirects` and enforced
-in `src/middleware.ts`.
+in `src/proxy.ts`.
 
 - **Schema.** The plugin generates a `redirects` collection: `from` (path),
   `to` (an internal reference **or** a custom URL), and a `type` (301/302).
@@ -173,7 +177,7 @@ in `src/middleware.ts`.
   in the base starter. **As you add content collections (pages, posts, …), add
   their slugs here** so editors can redirect to them. Custom-URL redirects (the
   common SEO case: `/old-path` → `/new-path` or an external URL) work regardless.
-- **Enforcement.** `src/middleware.ts` fetches `/api/redirects` (backed by
+- **Enforcement.** `src/proxy.ts` fetches `/api/redirects` (backed by
   `cms.getRedirects()` + `unstable_cache`, tag `cms:redirects`, so it doesn't
   wake Neon) and issues the redirect. It fails open — a transient error never
   blocks a request.
@@ -285,7 +289,7 @@ afterChange: [
 
 ### Edge-404 middleware for dynamic routes (extend when needed)
 
-`src/middleware.ts` already exists for redirect enforcement. The moment you add a
+`src/proxy.ts` already exists for redirect enforcement. The moment you add a
 `[slug]`/`[id]` route under `(frontend)/` that fetches from a CMS collection,
 **extend the middleware to also 410 unknown slugs** at the same time.
 
@@ -400,10 +404,10 @@ hours means multiple wake windows per day.
   `bun run env:pull` (wraps `vercel env pull .env.local`)
 - `NEXT_PUBLIC_`-prefixed vars are exposed to the browser — only use for
   non-sensitive values
-- **Analytics is configured via env vars**, not a CMS global. Each integration
-  enables only when its key is set: `NEXT_PUBLIC_GA_ID`, `NEXT_PUBLIC_GTM_ID`,
-  `NEXT_PUBLIC_FB_PIXEL_ID`, `NEXT_PUBLIC_POSTHOG_KEY` (+ `NEXT_PUBLIC_POSTHOG_HOST`).
-  Vercel Analytics + Speed Insights are always on.
+- **Analytics is configured in Site Settings**, not env vars. The /admin Site
+  Settings global exposes an Analytics tab for Google Analytics, Google Tag
+  Manager, Meta Pixel, and PostHog. Vercel Analytics + Speed Insights are always
+  on and require no CMS fields.
 
 ## ESLint
 
