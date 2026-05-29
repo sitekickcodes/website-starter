@@ -55,19 +55,31 @@ first visit to the admin you'll create your first user.
 
 See `.env.example` for the full list.
 
+## Neon Branches
+
+Create two long-lived Neon branches for each project:
+
+- `main` / production branch: Vercel Production `POSTGRES_URL`
+- `dev` branch: `.env.local` and Vercel Development `POSTGRES_URL`
+
+Use pooled connection strings for both. For Vercel Preview deployments, prefer
+Neon's Vercel integration with one database branch per preview deployment. If
+that is not enabled yet, point Preview at the `dev` branch.
+
 ## First-Time Database Setup
 
-This starter ships with **no committed migrations** (they're project-specific).
-On a fresh project database:
+This starter ships with a committed baseline migration in `src/migrations/` for
+Users, Media, Redirects, Site Settings, and Payload internals. On a fresh project
+database, `bun run build` runs `payload migrate` before `next build`, so the
+baseline and any later migrations apply automatically.
+
+During local development, Payload's Postgres adapter uses Drizzle push mode by
+default. Treat your local/dev database as a sandbox. When a schema change is
+ready to keep, create and commit a migration:
 
 ```bash
-bunx payload migrate:create   # generates the baseline (Users + Media + Redirects)
+bun run migrate:create -- add-posts
 ```
-
-Commit the generated file in `src/migrations/`. From then on, `bun run build`
-runs `payload migrate` before `next build`, so deploys apply migrations
-automatically. Local dev against an empty DB auto-creates tables via Drizzle
-push, so you can start building before generating the first migration.
 
 > **Never** run `bun dev` against your production database — it writes a
 > `batch = -1` marker that blocks the next build. Use a dev/staging DB.
@@ -126,8 +138,7 @@ shadcn color tokens; there's no prebuilt typography system to fight.
 1. Push to GitHub and import the project in Vercel
 2. Add the **Neon Postgres** + **Blob** integrations
 3. Set `PAYLOAD_SECRET` (and any optional keys)
-4. Commit your baseline migration (see above)
-5. Deploy — migrations run automatically before each build
+4. Deploy — the committed baseline migration runs automatically before the build
 
 ## License
 

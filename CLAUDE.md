@@ -23,7 +23,7 @@ into this starter.
 ## Stack
 
 - Next.js 16 (App Router, React Server Components, TypeScript), Node 24
-- Payload CMS 3 (headless CMS at /admin, dark theme)
+- Payload CMS 3.85+ (headless CMS at /admin, dark theme)
 - Neon Postgres via @payloadcms/db-vercel-postgres
 - Vercel Blob for file/image storage
 - Tailwind CSS v4 with CSS variables — **Inter** as the only typeface
@@ -43,6 +43,13 @@ into this starter.
 - Use `bunx` instead of `npx` for one-off commands
 - Add shadcn components with: `bunx shadcn@latest add <component>`
 - Pull env vars with: `bun run env:pull`
+
+## Agent Instructions
+
+- `CLAUDE.md` is the source of truth for project rules.
+- `AGENTS.md` is intentionally a symlink to `CLAUDE.md` so Codex-style agents,
+  Claude, and other coding tools read the same instructions. Keep it as a
+  symlink; do not maintain two separate instruction files.
 
 ## Project Structure
 
@@ -133,17 +140,24 @@ When changing field names, adding/removing fields, or modifying collection/globa
 schemas that affect the database:
 
 1. Make the schema change in the code (collection/global config)
-2. Run `bunx payload migrate:create` to generate a migration file in `src/migrations/`
+2. Run `bun run migrate:create -- <name>` to generate a migration file in `src/migrations/`
 3. Commit the migration file alongside the schema change
 4. Push — the build script runs `payload migrate --disable-transpile && next build`
    which applies pending migrations before the build starts
 
-**First-time project setup.** This starter ships with **no committed migrations**
-(they're project-specific). On a fresh project database, run
-`bunx payload migrate:create` once to generate the baseline migration
-(Users + Media + Redirects), commit it, then deploy. Local dev against an empty
-database auto-creates tables via Drizzle push, so you can start building before
-generating the first migration.
+**Baseline migration.** This starter commits a baseline migration in
+`src/migrations/` for the starter schema (Users, Media, Redirects, Site
+Settings, and Payload internals). Fresh production databases should get this
+schema from `bun run build`, which runs `payload migrate` before `next build`.
+Do not delete or regenerate the baseline unless you are intentionally resetting
+the starter's schema history.
+
+**Local development.** Payload's Postgres adapter leaves Drizzle push mode
+enabled in development, which is Payload's recommended local workflow. Use a
+dedicated local/dev database as a sandbox. When a feature's schema is ready,
+create and commit a migration with `bun run migrate:create -- <name>`. Do not
+mix local push-mode experiments and production migration state in the same
+database.
 
 **NEVER** run `bun dev` against the production database — it writes a `batch = -1`
 marker to `payload_migrations` that triggers an interactive prompt on the next
@@ -151,7 +165,8 @@ build, blocking deployment. Use a dedicated dev/staging database (or a throwaway
 local one) for development.
 
 Note: Migration files must use `import { sql } from 'drizzle-orm'` (not from
-`@payloadcms/db-vercel-postgres`) to avoid ESM re-export issues on Vercel.
+`@payloadcms/db-vercel-postgres`) to avoid ESM re-export issues on Vercel. Keep
+the generated `MigrateUpArgs` / `MigrateDownArgs` imports as type-only imports.
 
 ### Media Uploads
 
@@ -304,6 +319,36 @@ that returns `[slug, …]` (edge-cached, busted by the source collection's
 middleware fetch it and return a **410 Gone** for unknown slugs without firing the
 page lambda. Use 410, not 404 — Google deindexes 410s faster. Fail open so a
 brief slug-list outage never 404s valid pages.
+
+## Neon Branching & Environment Mapping
+
+Every project should use at least two Neon branches:
+
+- **`main` / production branch** — production data only. Vercel Production
+  `POSTGRES_URL` points here. Never run `bun dev` against this branch.
+- **`dev` / development branch** — child branch of production for local
+  development and shared dev testing. `.env.local` and Vercel Development
+  `POSTGRES_URL` point here.
+
+For Vercel Preview deployments, prefer the Neon Vercel integration's
+branch-per-preview workflow. Each preview deployment gets its own isolated Neon
+branch and connection string, so schema migrations and test content cannot
+pollute production or the shared dev branch. If branch-per-preview is not
+enabled yet, point Preview at the `dev` branch as the conservative fallback.
+
+Environment mapping:
+
+| Environment | Neon branch | Notes |
+|---|---|---|
+| Local `.env.local` | `dev` | Safe sandbox for Payload push mode and content experiments. |
+| Vercel Development | `dev` | Used by `bun run env:pull` for local setup. |
+| Vercel Preview | per-preview branch preferred | Neon integration can create/delete these automatically. Fallback: `dev`. |
+| Vercel Production | `main` / production | Migration-only. Never use for local dev. |
+
+When creating a new project, create the production branch first, then create
+`dev` as a child branch. Use pooled connection strings (`-pooler`) for both
+branches. Refresh or recreate `dev` from production whenever it needs realistic
+schema/data, but be deliberate because it can overwrite dev-only test content.
 
 ## Neon Connection Tuning
 
