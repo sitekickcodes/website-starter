@@ -1,10 +1,13 @@
 /**
- * Shared CMS content types.
+ * Shared CMS types.
  *
- * These interfaces define the shape of data returned to frontend pages.
- * The Payload adapter (payload.ts) maps raw Payload docs to these types.
+ * The Payload adapter (payload.ts) maps raw Payload docs into these
+ * frontend-facing shapes. Keep this layer thin — add a type here when you
+ * expose a new collection/global to the frontend, then implement it in
+ * payload.ts and (if it should be cached) wrap it in cached.ts.
  */
 
+/** A normalized image, handy when mapping `media` uploads for the frontend. */
 export interface CMSImage {
   url: string;
   alt?: string;
@@ -14,58 +17,23 @@ export interface CMSImage {
   focalY?: number;
 }
 
-export interface Page {
-  id: string;
-  path: string;
-  metaTitle?: string;
-  metaDescription?: string;
-  ogImage?: CMSImage;
+/** A resolved redirect rule consumed by `src/middleware.ts`. */
+export interface Redirect {
+  /** Source path, e.g. "/old-page". */
+  from: string;
+  /** Destination — a path ("/new") or absolute URL ("https://…"). */
+  to: string;
+  /** HTTP status: 301 permanent, 302 temporary. */
+  type: "301" | "302";
 }
 
-export interface SiteSettings {
-  siteName: string;
-  siteDescription?: string;
-  favicon?: CMSImage;
-  ogImage?: CMSImage;
-  contact?: {
-    businessName?: string;
-    email?: string;
-    phone?: string;
-    street?: string;
-    city?: string;
-    state?: string;
-    zip?: string;
-  };
-  headScripts?: string;
-  bodyScripts?: string;
-}
-
-export interface AnalyticsSettings {
-  googleAnalyticsId?: string;
-  googleTagManagerId?: string;
-  facebookPixelId?: string;
-}
-
-export interface SocialLinks {
-  instagram?: string;
-  facebook?: string;
-  x?: string;
-  google?: string;
-  linkedin?: string;
-  youtube?: string;
-  tiktok?: string;
-}
-
-/** Options for CMS fetchers that vary based on draft mode. */
+/** Options for fetchers that vary based on draft mode (Live Preview). */
 export interface CMSFetchOptions {
-  /** When true, fetch the latest draft revision (used inside Live Preview). */
+  /** When true, fetch the latest draft revision instead of the published one. */
   draft?: boolean;
 }
 
-/** The CMS adapter interface that each implementation must satisfy. */
+/** The CMS adapter interface each implementation must satisfy. */
 export interface CMSAdapter {
-  getPage(path: string, opts?: CMSFetchOptions): Promise<Page | null>;
-  getSiteSettings(): Promise<SiteSettings>;
-  getAnalytics(): Promise<AnalyticsSettings>;
-  getSocialLinks(): Promise<SocialLinks>;
+  getRedirects(): Promise<Redirect[]>;
 }

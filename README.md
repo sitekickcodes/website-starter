@@ -1,186 +1,129 @@
 # Sitekick Payload Starter
 
-A pre-configured Next.js + Payload CMS starter for Sitekick projects. Clone it, connect your services, and start building.
+A minimal, **un-opinionated** Next.js + Payload CMS starter. It ships the
+infrastructure — migrations, a Neon-friendly cache/draft architecture, Vercel
+Blob uploads with AI alt text, redirects, and analytics wiring — and gets out of
+the way on schema and design. Clone it, connect your services, and build.
+
+> **What's intentionally not here:** no content collections beyond `Users` +
+> `Media`, no globals, no header/footer/nav, no typography system, no fonts
+> beyond **Inter**, and no preinstalled shadcn components. Add schema and design
+> per project. See `CLAUDE.md` for the full rationale and conventions.
 
 ## Quick Start
 
 ```bash
-# Clone the repo
 git clone https://github.com/sitekickcodes/payload-starter.git my-site
 cd my-site
 
-# Install dependencies
 bun install
 
-# Pull environment variables from Vercel
-bun run env:pull   # wraps `vercel env pull .env.local`
+# Pull env vars from a linked Vercel project…
+bun run env:pull            # wraps `vercel env pull .env.local`
+# …or copy the template and fill it in by hand:
+# cp .env.example .env.local
 
-# Start dev server
 bun dev
 ```
 
-> **No Vercel project linked yet?** Copy the template instead: `cp .env.example .env.local` and fill in the values by hand.
-
-Open [http://localhost:3000](http://localhost:3000) for the site, and [http://localhost:3000/admin](http://localhost:3000/admin) for the Payload admin panel.
-
-On first visit to the admin, you'll be prompted to create your first user.
+Open [localhost:3000](http://localhost:3000) for the site and
+[localhost:3000/admin](http://localhost:3000/admin) for the Payload admin. On
+first visit to the admin you'll create your first user.
 
 ## Stack
 
-- **Next.js 16** — App Router, React Server Components, TypeScript
-- **Payload CMS 3** — Headless CMS at `/admin`, dark theme
-- **Neon Postgres** — Database via `@payloadcms/db-vercel-postgres`
-- **Vercel Blob** — File/image storage
-- **Tailwind CSS v4** — Utility-first styling with CSS variables
-- **shadcn/ui** — Component library using Base UI
-- **Resend** — Transactional email
-- **Bun** — Package manager and runtime
-- **Deployed on Vercel**
+- **Next.js 16** — App Router, RSC, TypeScript (Node 24)
+- **Payload CMS 3** — admin at `/admin`, dark theme
+- **Neon Postgres** — via `@payloadcms/db-vercel-postgres`
+- **Vercel Blob** — file/image storage
+- **Tailwind CSS v4** — with **Inter** as the only typeface
+- **shadcn/ui** — installed per project (`bunx shadcn@latest add <x>`)
+- **Resend** — transactional/auth email
+- **Bun** — package manager and runtime
 
 ## Connecting Services
 
-### Neon Postgres
-1. Create a Neon project at [neon.tech](https://neon.tech)
-2. Copy the connection string into `POSTGRES_URL` in `.env.local`
-3. Or add the Neon integration in your Vercel project (auto-sets `POSTGRES_URL`)
+| Service | What to set | Notes |
+|---|---|---|
+| **Neon Postgres** | `POSTGRES_URL` | Use the **pooled** host (`…-pooler.<region>.aws.neon.tech`). The Vercel Neon integration sets this automatically. |
+| **Vercel Blob** | `BLOB_READ_WRITE_TOKEN` | Add Blob storage in the Vercel dashboard. |
+| **Payload** | `PAYLOAD_SECRET` | Generate with `openssl rand -base64 32`. |
+| **Resend** (optional) | `RESEND_API_KEY`, `RESEND_FROM_EMAIL` | Powers Payload auth/transactional email. |
+| **Anthropic** (optional) | `ANTHROPIC_API_KEY` | Auto-generates media alt text. |
+| **Analytics** (optional) | `NEXT_PUBLIC_GA_ID`, `NEXT_PUBLIC_GTM_ID`, `NEXT_PUBLIC_FB_PIXEL_ID`, `NEXT_PUBLIC_POSTHOG_KEY` | Each enables only when its key is set. Vercel Analytics + Speed Insights are always on. |
 
-> **Use the pooler endpoint.** Point `POSTGRES_URL` at the host that ends in
-> `-pooler.<region>.aws.neon.tech` (Neon's PgBouncer endpoint), not the direct
-> compute endpoint. The Vercel integration does this automatically. PgBouncer
-> 1.21+ supports prepared statements in transaction mode, so Drizzle works
-> against the pooler with no extra config — and you get warm connections,
-> which materially shortens cold-start latency on serverless. See Neon's
-> [connection pooling docs](https://neon.tech/docs/connect/connection-pooling).
+See `.env.example` for the full list.
 
-### Vercel Blob
-1. Add Blob storage in your Vercel project dashboard
-2. Copy the token into `BLOB_READ_WRITE_TOKEN` in `.env.local`
+## First-Time Database Setup
 
-### Payload Secret
-Generate one with: `openssl rand -base64 32`
-
-## Collections & Globals
-
-### Collections
-
-| Collection | Description |
-|------------|-------------|
-| **Pages** | SEO metadata for each route — auto-synced from filesystem on init |
-| **Media** | Image/PDF uploads with auto-generated alt text, thumbnail/card/desktop sizes |
-| **Contact Submissions** | Contact form entries (read-only card view in admin) |
-| **Newsletter Submissions** | Email subscribers (read-only in admin) |
-| **Users** | Auth-enabled. Fields: email, name, role (admin/editor) |
-
-### Globals
-
-| Global | Description |
-|--------|-------------|
-| **Site Settings** | Site name, contact info, analytics, social links, scripts, redirects |
-
-## CMS Layer
-
-Frontend pages import from `@/lib/cms` — never directly from Payload:
-
-```tsx
-import { cms } from "@/lib/cms";
-
-export default async function Home() {
-  const settings = await cms.getSiteSettings();
-  return <h1>{settings.siteName}</h1>;
-}
-```
-
-| File | Purpose |
-|------|---------|
-| `src/lib/cms/types.ts` | Content interfaces (`Page`, `SiteSettings`, `CMSImage`, etc.) |
-| `src/lib/cms/payload.ts` | Data-fetching functions using Payload's local API |
-| `src/lib/cms/index.ts` | Re-exports from payload.ts |
-
-## Fonts
-
-| Token | Font | Usage |
-|-------|------|-------|
-| `font-sans` | Geist Sans | Body text, UI elements |
-| `font-mono` | Geist Mono | Code, technical content |
-| `font-display` | Instrument Serif | Headings, quotes, display text |
-
-## Typography Classes
-
-Pre-built utility classes in `globals.css`. All sizes are 12px minimum for accessibility.
-
-| Class | Size | Font |
-|-------|------|------|
-| `.h1`–`.h6` | 64px → 18px | Instrument Serif |
-| `.body-lg` | 18px | Geist Sans |
-| `.body-md` | 16px | Geist Sans |
-| `.body-sm` | 14px | Geist Sans |
-| `.type-lead` | 20px | Geist Sans |
-| `.type-button` | 14px | Geist Sans (medium) |
-| `.type-eyebrow` | 12px | Geist Sans (uppercase) |
-| `.type-caption` | 12px | Geist Sans |
-| `.type-overline` | 12px | Geist Sans (uppercase) |
-| `.type-quote` | 20px | Instrument Serif (italic) |
-
-## Adding Components
+This starter ships with **no committed migrations** (they're project-specific).
+On a fresh project database:
 
 ```bash
-bunx shadcn@latest add button dialog dropdown-menu
+bunx payload migrate:create   # generates the baseline (Users + Media + Redirects)
 ```
 
-Components are installed to `src/components/ui/`.
+Commit the generated file in `src/migrations/`. From then on, `bun run build`
+runs `payload migrate` before `next build`, so deploys apply migrations
+automatically. Local dev against an empty DB auto-creates tables via Drizzle
+push, so you can start building before generating the first migration.
 
-## Form Protection
+> **Never** run `bun dev` against your production database — it writes a
+> `batch = -1` marker that blocks the next build. Use a dev/staging DB.
 
-| Layer | What it does |
-|-------|-------------|
-| **Cloudflare Turnstile** | Invisible CAPTCHA — verifies humans server-side |
-| **Honeypot field** | Hidden field that bots fill in — silently swallowed |
-| **Rate limiting** | Per-IP throttling (5/min contact, 10/min newsletter) |
+## Collections
 
-Set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` to enable. Forms work without keys in local dev.
+| Collection | Description |
+|---|---|
+| **Users** | Auth-enabled (admin login). |
+| **Media** | Uploads to Vercel Blob, AI-generated alt text, responsive sizes. |
+| **Redirects** | From `@payloadcms/plugin-redirects` — manage 301/302 redirects in /admin; enforced by `src/middleware.ts`. |
 
-## Project Structure
+Add your own collections in `src/collections/` and register them in
+`src/payload.config.ts`, then run `bun run generate:types`.
 
+## Architecture Highlights
+
+- **CMS layer** (`src/lib/cms/`) — import from `@/lib/cms`, never Payload
+  directly. Reads are wrapped in `unstable_cache` so public traffic doesn't wake
+  Neon; CMS edits invalidate via `revalidateTag`.
+- **Redirects** — managed in /admin, enforced in `src/middleware.ts` via a cached
+  `/api/redirects` lookup.
+- **Draft mode / Live Preview** — `/api/draft` + `/api/exit-draft` are wired for
+  when you add a draft-enabled collection.
+- **Neon tuning** — pooled endpoint + aggressive idle timeouts so compute
+  suspends between editing sessions.
+
+The full conventions — caching, migrations, Neon tuning, redirects, adding
+collections — live in **`CLAUDE.md`**.
+
+## Adding UI
+
+```bash
+bunx shadcn@latest add button card dialog
 ```
-src/
-  app/
-    (frontend)/         # Site pages, layout, globals.css
-    (payload)/          # Payload admin & API routes (auto-generated)
-    api/                # Custom API routes (forms, cron, etc.)
-  collections/          # Payload CMS collection configs
-  globals/              # Payload CMS global configs
-  components/
-    layout/             # Header, footer, nav
-    marketing/          # Newsletter form
-    contact/            # Contact form
-    tracking/           # PostHog, analytics
-    payload/            # Payload admin customizations
-    ui/                 # shadcn/ui components
-  lib/
-    cms/                # CMS layer (types, payload adapter, re-export)
-    utils.ts            # cn() class merge utility
-  hooks/                # Custom React hooks
-  payload.config.ts     # Payload CMS configuration
-  payload-types.ts      # Auto-generated Payload types
-```
+
+Components install to `src/components/ui/`. Style with Tailwind utilities and the
+shadcn color tokens; there's no prebuilt typography system to fight.
 
 ## Scripts
 
 | Command | Description |
-|---------|-------------|
+|---|---|
 | `bun dev` | Start dev server |
 | `bun run build` | Run migrations + production build |
 | `bun start` | Start production server |
 | `bun run lint` | Run ESLint |
-| `bun run generate:types` | Regenerate Payload TypeScript types |
-| `bun run env:pull` | Pull env vars from Vercel (`vercel env pull .env.local`) |
+| `bun run generate:types` | Regenerate Payload types |
+| `bun run migrate:create` | Create a migration from schema changes |
+| `bun run env:pull` | Pull env vars from Vercel |
 
 ## Deploying to Vercel
 
-1. Push to GitHub
-2. Import project in Vercel
-3. Add integrations — **Neon Postgres** + **Blob Storage**
-4. Set `PAYLOAD_SECRET` environment variable
+1. Push to GitHub and import the project in Vercel
+2. Add the **Neon Postgres** + **Blob** integrations
+3. Set `PAYLOAD_SECRET` (and any optional keys)
+4. Commit your baseline migration (see above)
 5. Deploy — migrations run automatically before each build
 
 ## License

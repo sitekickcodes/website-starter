@@ -100,7 +100,9 @@ export const Media: CollectionConfig = {
           return doc;
         }
 
-        const thumbUrl = (doc.sizes as Record<string, any>)?.thumbnail?.url;
+        const thumbUrl = (
+          doc.sizes as { thumbnail?: { url?: string | null } } | undefined
+        )?.thumbnail?.url;
         const imageUrl = thumbUrl || doc.url;
         if (!imageUrl) return doc;
 
